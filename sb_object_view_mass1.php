@@ -1,18 +1,20 @@
 <?php
 require_once '../../sess.inc';
 $user_id = @$_SESSION['auth']['uid'];
-$firm_id=(int)$_GET['firm_id'];
-
 
 try{
     $curPage = $_POST['page'];
     $rowsPerPage = $_POST['rows'];
     $sortingField = $_POST['sidx'];
     $sortingOrder = $_POST['sord'];
-    
-        
+    $join='';
+
+    $qWhere = ' where otv.gps=0 and grp="AH" and otv.state="a" ';
+
+    //определяем команду (поиск или просто запрос на вывод данных)
+    //если поиск, конструируем WHERE часть запроса
     if (isset($_POST['_search']) && $_POST['_search'] == 'true') {
-        $allowedFields = array( 'pla.id', 'pla.name_place','pla.name_object','pla.notes');
+        $allowedFields = array( 'otv.name','ot.fio');
         $allowedOperations = array('AND', 'OR');
         //if(@$tree!='') $tree=' and tree_id ='.$tree;
 
@@ -24,7 +26,7 @@ try{
             die();
         }
 
-        
+        $qWhere .= ' and ';
         $firstElem = true;
 
 
@@ -47,47 +49,58 @@ try{
 
             //вставляем условия
             if (in_array($rule->field, $allowedFields)) {
-                //$left='';
 
                 switch ($rule->op) {
-                    case 'eq': $qWhere .= $rule->field.' = "'.$rule->data.'"'; break;
+                    case 'eq': $qWhere .= $rule->field.' = "'.TRIM($rule->data).'"'; break;
                     case 'ne': $qWhere .= $rule->field.' <> "'.$rule->data.'"'; break;
                     case 'bw': $qWhere .= $rule->field.' LIKE "'.$rule->data.'%"'; break;
-                    case 'cn': $qWhere .= $rule->field.' LIKE '.'"%'.$rule->data.'%"'; break;
+                    case 'cn': $qWhere .= $rule->field.' LIKE '.'"%'.TRIM($rule->data).'%"'; break;
                     default: throw new Exception('Ошибка создания запроса');
                 }
+
             }
             else {
                 //если получили не существующее условие - возвращаем описание ошибки
                 throw new Exception('Условие не существует 2'); die();
             }
         }
+
+    
     }
 
+
     //определяем количество записей в таблице
-    $sel='  SELECT
-            count(pla.id) as count
-            FROM  sb_spr_place pla';   // дописать вере!!!!!!!!!!!!!!! приравнять к ай ди 
+    $sel='
+            select
+            count(id) as count
+            FROM
+            spr_firms   otv
+
+         '.$qWhere;
 
     $totalRows = $DB->select($sel);
 //var_dump($sel);die();
 
     $firstRowIndex = $curPage * $rowsPerPage - $rowsPerPage;
 
-//var_dump($firstRowIndex);die();
+
     $response->page = $curPage;
     @$response->total = ceil($totalRows[0]['count'] / $rowsPerPage);
     @$response->records = $totalRows[0]['count'];
 
  $sel='
-    SELECT
-   pla.id
-  ,pla.name_place
-  ,pla.name_object
-  ,pla.notes
+        SELECT
+            otv.name,
+            otv.id,
+            ot.fio
 
-  from
-     sb_spr_place  pla    WHERE  firm_id=' .$firm_id.';
+
+        FROM
+            spr_firms   otv
+      LEFT JOIN sb_phone ot ON ot.firm_id=otv.id
+
+
+             '.$qWhere.'
 
           ORDER BY '.$sortingField.' '.$sortingOrder.' LIMIT '.$firstRowIndex.', '.$rowsPerPage;
 //var_dump($sel);die();
@@ -97,13 +110,12 @@ try{
 //var_dump($rows);die();
 
       foreach($rows as $i=>$row){
-      
-        $response->rows[$i]['id']=$row['id'];//.'_'.$row['ul_id'];
+         //$name=explode(' ',$row['name_ts']);
+
+          $response->rows[$i]['id']=$row['id'];
         $response->rows[$i]['cell']=array(
-                                           $row['id']
-                                          ,$row['name_place']
-                                          ,$row['name_object']
-                                          ,$row['notes']
+                                           $row['name']
+                                          ,$row['fio']
 
 
                   );
